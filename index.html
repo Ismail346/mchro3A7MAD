@@ -1111,7 +1111,7 @@
             `).join('');
         }
         // ====== WITHDRAWAL REQUESTS SYSTEM ======
-        async function submitWithdrawalRequest(amount, walletAddress, shibaAmount) {
+        async function submitWithdrawalRequest(amount, platform, walletId, shibaAmount) {
             try {
                 const userIP = await getUserIP();
                 const requestId = Date.now().toString();
@@ -1120,7 +1120,8 @@
                     username: currentUsername,
                     amount: amount,
                     shibaAmount: shibaAmount,
-                    walletAddress: walletAddress,
+                    platform: platform,
+                    walletId: walletId,
                     userIP: userIP,
                     status: 'pending',
                     adminComment: '',
@@ -1177,7 +1178,8 @@
                         </span>
                     </div>
                     <div class="text-sm text-purple-300 mb-2">
-                        <div>المحفظة: ${request.walletAddress}</div>
+                        <div>المنصة: ${request.platform === 'binance' ? 'Binance' : 'Bybit'}</div>
+                        <div>ID: ${request.walletId}</div>
                         <div>التاريخ: ${new Date(request.createdAt).toLocaleDateString('ar-EG')}</div>
                         <div>الإعلانات: ${request.adsWatched} إعلان</div>
                     </div>
@@ -1277,14 +1279,31 @@
                                 oninput="validateWithdraw()">
                             <p id="amountError" class="text-red-400 text-sm mt-2 text-center hidden">⚠️ يجب أن يكون المبلغ من مضاعفات 1000</p>
                         </div>
-                        <div class="mb-6">
+                        <div class="mb-4">
                             <label class="block text-sm font-bold mb-2 text-purple-200">
-                                عنوان محفظة Shiba
+                                اختر المنصة
                             </label>
-                            <input type="text" id="walletAddress" placeholder="0x..."
-                                class="w-full bg-black/30 border-2 border-blue-500/50 rounded-2xl px-4 py-4 text-lg font-mono focus:border-blue-400 focus:outline-none placeholder:text-blue-400/50"
+                            <div class="grid grid-cols-2 gap-3 mb-3">
+                                <button id="binanceBtn" onclick="selectPlatform('binance')" class="p-4 rounded-2xl border-2 border-yellow-500/50 bg-yellow-500/20 hover:bg-yellow-500/30 transition-all">
+                                    <div class="flex items-center justify-center gap-2">
+                                        <span class="font-bold">Binance</span>
+                                    </div>
+                                </button>
+                                <button id="bybitBtn" onclick="selectPlatform('bybit')" class="p-4 rounded-2xl border-2 border-blue-500/50 bg-blue-500/20 hover:bg-blue-500/30 transition-all">
+                                    <div class="flex items-center justify-center gap-2">
+                                        <span class="font-bold">Bybit</span>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mb-6">
+                            <label class="block text-sm font-bold mb-2 text-purple-200" id="platformLabel">
+                                أدخل الـ ID الخاص بك
+                            </label>
+                            <input type="text" id="walletId" placeholder="أدخل الـ ID الخاص بك هنا..."
+                                class="w-full bg-black/30 border-2 border-blue-500/50 rounded-2xl px-4 py-4 text-lg focus:border-blue-400 focus:outline-none placeholder:text-blue-400/50"
                                 oninput="validateWithdraw()">
-                            <p id="walletError" class="text-yellow-400 text-sm mt-2 text-center hidden">⚠️ تأكد من إدخال عنوان المحفظة الصحيح</p>
+                            <p id="walletError" class="text-yellow-400 text-sm mt-2 text-center hidden">⚠️ تأكد من إدخال الـ ID الصحيح</p>
                         </div>
                         <button id="claimBtn" onclick="handleClaim()" disabled
                             class="w-full p-5 rounded-2xl font-bold text-xl shadow-2xl transform transition-all bg-gray-600 opacity-50 cursor-not-allowed">
@@ -1544,6 +1563,7 @@
             });
             if (page === 'claim') {
                 loadWithdrawalRequests();
+                resetPlatformSelection();
             }
             if (page === 'profile') {
                 loadProfileData();
@@ -1557,9 +1577,43 @@
             const requests = await getUserWithdrawalRequests();
             updateWithdrawalRequestsUI(requests);
         }
+        let selectedPlatform = null;
+        function selectPlatform(platform) {
+            selectedPlatform = platform;
+            const binanceBtn = document.getElementById('binanceBtn');
+            const bybitBtn = document.getElementById('bybitBtn');
+            const platformLabel = document.getElementById('platformLabel');
+            
+            if (platform === 'binance') {
+                binanceBtn.className = 'p-4 rounded-2xl border-2 border-yellow-500 bg-yellow-500/30 transition-all';
+                bybitBtn.className = 'p-4 rounded-2xl border-2 border-blue-500/50 bg-blue-500/20 hover:bg-blue-500/30 transition-all';
+                platformLabel.textContent = 'أدخل Binance ID الخاص بك';
+                document.getElementById('walletId').placeholder = 'أدخل Binance ID الخاص بك هنا...';
+            } else {
+                binanceBtn.className = 'p-4 rounded-2xl border-2 border-yellow-500/50 bg-yellow-500/20 hover:bg-yellow-500/30 transition-all';
+                bybitBtn.className = 'p-4 rounded-2xl border-2 border-blue-500 bg-blue-500/30 transition-all';
+                platformLabel.textContent = 'أدخل Bybit ID الخاص بك';
+                document.getElementById('walletId').placeholder = 'أدخل Bybit ID الخاص بك هنا...';
+            }
+            validateWithdraw();
+        }
+        function resetPlatformSelection() {
+            selectedPlatform = null;
+            const binanceBtn = document.getElementById('binanceBtn');
+            const bybitBtn = document.getElementById('bybitBtn');
+            const platformLabel = document.getElementById('platformLabel');
+            
+            if (binanceBtn && bybitBtn) {
+                binanceBtn.className = 'p-4 rounded-2xl border-2 border-yellow-500/50 bg-yellow-500/20 hover:bg-yellow-500/30 transition-all';
+                bybitBtn.className = 'p-4 rounded-2xl border-2 border-blue-500/50 bg-blue-500/20 hover:bg-blue-500/30 transition-all';
+                platformLabel.textContent = 'أدخل الـ ID الخاص بك';
+                document.getElementById('walletId').placeholder = 'أدخل الـ ID الخاص بك هنا...';
+                document.getElementById('walletId').value = '';
+            }
+        }
         function validateWithdraw() {
             const amount = parseInt(document.getElementById('withdrawAmount').value);
-            const wallet = document.getElementById('walletAddress').value;
+            const walletId = document.getElementById('walletId').value;
             const btn = document.getElementById('claimBtn');
             const amountError = document.getElementById('amountError');
             const walletError = document.getElementById('walletError');
@@ -1568,12 +1622,12 @@
             } else {
                 amountError.classList.add('hidden');
             }
-            if (wallet && wallet.length < 10) {
+            if (walletId && walletId.length < 3) {
                 walletError.classList.remove('hidden');
             } else {
                 walletError.classList.add('hidden');
             }
-            if (amount >= 1000 && amount % 1000 === 0 && amount <= currentUser.points && wallet && wallet.length >= 10) {
+            if (amount >= 1000 && amount % 1000 === 0 && amount <= currentUser.points && walletId && walletId.length >= 3 && selectedPlatform) {
                 btn.disabled = false;
                 btn.className = 'w-full p-5 rounded-2xl font-bold text-xl shadow-2xl transform transition-all bg-gradient-to-r from-green-500 to-emerald-600 hover:scale-105 active:scale-95 shadow-green-500/50';
                 const shibaAmount = (amount / 1000 * 3000).toLocaleString();
@@ -1585,17 +1639,19 @@
                     btn.textContent = 'أدخل مبلغاً صحيحاً';
                 } else if (amount > currentUser.points) {
                     btn.textContent = 'نقاط غير كافية';
-                } else if (!wallet || wallet.length < 10) {
-                    btn.textContent = 'أدخل عنوان المحفظة';
+                } else if (!walletId || walletId.length < 3) {
+                    btn.textContent = 'أدخل الـ ID الخاص بك';
+                } else if (!selectedPlatform) {
+                    btn.textContent = 'اختر المنصة';
                 }
             }
         }
         async function handleClaim() {
             const amount = parseInt(document.getElementById('withdrawAmount').value);
-            const wallet = document.getElementById('walletAddress').value;
-            if (amount >= 1000 && amount % 1000 === 0 && amount <= currentUser.points && wallet && wallet.length >= 10) {
+            const walletId = document.getElementById('walletId').value;
+            if (amount >= 1000 && amount % 1000 === 0 && amount <= currentUser.points && walletId && walletId.length >= 3 && selectedPlatform) {
                 const shibaAmount = amount / 1000 * 3000;
-                const success = await submitWithdrawalRequest(amount, wallet, shibaAmount);
+                const success = await submitWithdrawalRequest(amount, selectedPlatform, walletId, shibaAmount);
                 if (success) {
                     currentUser.points -= amount;
                     const userRef = database.ref('users/' + currentUsername);
@@ -1603,7 +1659,8 @@
                     updateUI();
                     showToast('تم إرسال طلب السحب! سيتم المراجعة قريباً');
                     document.getElementById('withdrawAmount').value = '';
-                    document.getElementById('walletAddress').value = '';
+                    document.getElementById('walletId').value = '';
+                    resetPlatformSelection();
                     validateWithdraw();
                     loadWithdrawalRequests();
                 } else {
