@@ -242,7 +242,7 @@
                             <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                             </svg>
-                            <span>شاهد الإعلانات واربح 10 نقاط لكل إعلان</span>
+                            <span>شاهد الإعلانات واربح 5 نقاط لكل إعلان</span>
                         </div>
                         <div class="flex items-center gap-2 text-sm">
                             <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -497,14 +497,14 @@
                     if (elapsedTime < minRequiredTime) {
                         showToast('❌ يجب مشاهدة الإعلان لفترة كافية', true);
                     } else {
-                        // منح 10 نقاط بعد التأكد من الوقت الكافي
-                        showToast('حصلت على +10 نقاط! 🎉');
+                        // منح 5 نقاط بعد التأكد من الوقت الكافي
+                        showToast('حصلت على +5 نقاط! 🎉');
                         const userRef = database.ref('users/' + currentUsername);
                         await userRef.update({
-                            points: firebase.database.ServerValue.increment(10),
+                            points: firebase.database.ServerValue.increment(5),
                             totalAdsWatched: firebase.database.ServerValue.increment(1)
                         });
-                        currentUser.points += 10;
+                        currentUser.points += 5;
                         currentUser.totalAdsWatched = (currentUser.totalAdsWatched || 0) + 1;
                         await recordAdWatch(currentUsername);
                         updateUI();
@@ -520,7 +520,7 @@
                     setTimeout(() => {
                         if (btn) {
                             btn.disabled = false;
-                            btn.textContent = 'شاهد إعلان (+10 نقاط)';
+                            btn.textContent = 'شاهد إعلان (+5 نقاط)';
                             btn.classList.remove('opacity-50', 'cursor-not-allowed');
                         }
                     }, 1500);
@@ -1214,7 +1214,7 @@
                         </div>
                         <div class="space-y-3">
                             <button id="watchAdBtn" onclick="tryWatchAd()" class="w-full bg-gradient-to-r from-green-500 to-emerald-600 p-4 rounded-2xl font-bold text-lg shadow-lg shadow-green-500/50 hover:scale-105 transform transition-all active:scale-95 flex items-center justify-between">
-                                <span>شاهد إعلان (+10 نقاط)</span>
+                                <span>شاهد إعلان (+5 نقاط)</span>
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"></path>
                                 </svg>
