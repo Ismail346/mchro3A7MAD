@@ -59,6 +59,15 @@
         .status-pending { background: linear-gradient(45deg, #f59e0b, #d97706); }
         .status-approved { background: linear-gradient(45deg, #10b981, #059669); }
         .status-rejected { background: linear-gradient(45deg, #ef4444, #dc2626); }
+        .copy-btn {
+            transition: all 0.3s ease;
+        }
+        .copy-btn:hover {
+            transform: scale(1.05);
+        }
+        .copy-btn:active {
+            transform: scale(0.95);
+        }
     </style>
 </head>
 <body class="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white min-h-screen overflow-x-hidden">
@@ -222,6 +231,21 @@
                             class="w-full bg-white/10 border-2 border-white/20 rounded-xl px-4 py-3 focus:border-purple-400 focus:outline-none placeholder:text-white/40"
                             placeholder="أعد إدخال كلمة المرور">
                     </div>
+                    <!-- New: Referral Code Input -->
+                    <div class="bg-gradient-to-r from-blue-500/10 to-purple-500/10 p-4 rounded-xl border border-blue-400/20">
+                        <label class="block text-sm font-bold mb-2 text-purple-200">
+                            كود الإحالة (اختياري)
+                        </label>
+                        <input type="text" id="referralCode" maxlength="9"
+                            class="w-full bg-white/10 border-2 border-blue-400/30 rounded-xl px-4 py-3 focus:border-blue-400 focus:outline-none placeholder:text-blue-400/50"
+                            placeholder="أدخل كود الإحالة المكون من 9 أرقام">
+                        <p class="text-xs text-blue-300 mt-2">
+                            ⭐ سيحصل كل منك وصديقك على 50 نقطة مجانية عند استخدام كود الإحالة
+                        </p>
+                        <p class="text-xs text-purple-300 mt-1">
+                            يمكنك ترك هذا الحقل فارغاً إذا لم يكن لديك كود إحالة
+                        </p>
+                    </div>
                     <button type="submit" class="w-full bg-gradient-to-r from-green-500 to-emerald-600 py-4 rounded-xl font-bold text-lg shadow-lg shadow-green-500/50 hover:scale-105 transform transition-all">
                         إنشاء حساب
                     </button>
@@ -246,6 +270,12 @@
                         </div>
                         <div class="flex items-center gap-2 text-sm">
                             <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span>ادع أصدقاءك واربح 20% من أرباحهم</span>
+                        </div>
+                        <div class="flex items-center gap-2 text-sm">
+                            <svg class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                             </svg>
                             <span>حول النقاط إلى SHIBA واسحبها</span>
@@ -402,9 +432,18 @@
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
+        
+        // ====== نظام الإحالة الجديد ======
+        
+        // دالة إنشاء referralID مكون من 9 أرقام
+        function generateReferralID() {
+            return Math.floor(100000000 + Math.random() * 900000000).toString();
+        }
+        
         // ====== AD LIMIT SYSTEM ======
         const MAX_ADS_PER_12H = 100;
         const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+        
         // Compute current ad count in last 12 hours
         function getAdCountInLast12Hours(userData) {
             const now = Date.now();
@@ -418,6 +457,7 @@
             }
             return count;
         }
+        
         // Clean old sessions (optional optimization)
         function cleanOldAdSessions(userData) {
             const now = Date.now();
@@ -429,21 +469,25 @@
             }
             return adSessions;
         }
+        
         // Check if user can watch another ad
         function canWatchAd(userData) {
             const currentCount = getAdCountInLast12Hours(userData);
             return currentCount < MAX_ADS_PER_12H;
         }
-        // Record ad watch
+        
+        // Record ad watch with referral earnings
         async function recordAdWatch(username) {
             try {
                 const userRef = database.ref('users/' + username);
                 const snapshot = await userRef.once('value');
                 let userData = snapshot.val() || {};
+                
                 // Clean old sessions
                 userData.adSessions = cleanOldAdSessions(userData);
                 const now = Date.now();
                 let foundSession = false;
+                
                 // Find any active session within last 12h
                 for (const start of Object.keys(userData.adSessions)) {
                     if (now - parseInt(start) < TWELVE_HOURS_MS) {
@@ -452,10 +496,12 @@
                         break;
                     }
                 }
+                
                 if (!foundSession) {
                     // Start new session
                     userData.adSessions[now] = 1;
                 }
+                
                 await userRef.update({ adSessions: userData.adSessions });
                 currentUser.adSessions = userData.adSessions;
                 return true;
@@ -464,7 +510,8 @@
                 return false;
             }
         }
-        // ====== MONETAG AD SYSTEM مع الحماية الزمنية (7 ثوانٍ) ======
+        
+        // ====== MONETAG AD SYSTEM مع نظام الإحالة ======
         let adWatchStartTime = null;
 
         function tryWatchAd() {
@@ -500,12 +547,45 @@
                         // منح 5 نقاط بعد التأكد من الوقت الكافي
                         showToast('حصلت على +5 نقاط! 🎉');
                         const userRef = database.ref('users/' + currentUsername);
+                        
+                        // تحديث نقاط المستخدم
                         await userRef.update({
                             points: firebase.database.ServerValue.increment(5),
                             totalAdsWatched: firebase.database.ServerValue.increment(1)
                         });
+                        
                         currentUser.points += 5;
                         currentUser.totalAdsWatched = (currentUser.totalAdsWatched || 0) + 1;
+                        
+                        // إذا كان لدى المستخدم داعي (referrer) وغير محروم من الإحالة
+                        if (currentUser.referredBy && currentUser.referredBy !== "" && currentUser.referredBy !== "none") {
+                            const referrerRef = database.ref('users/' + currentUser.referredBy);
+                            const referrerSnapshot = await referrerRef.once('value');
+                            const referrerData = referrerSnapshot.val();
+                            
+                            // التحقق من أن الداعي غير محروم من الإحالة
+                            if (referrerData && !referrerData.referralBanned) {
+                                // إعطاء 20% من 5 نقاط = 1 نقطة للداعي
+                                await referrerRef.update({
+                                    points: firebase.database.ServerValue.increment(1),
+                                    referralEarnings: firebase.database.ServerValue.increment(1)
+                                });
+                                
+                                // إرسال إشعار للداعي
+                                const notificationId = Date.now().toString();
+                                const notificationData = {
+                                    id: notificationId,
+                                    username: currentUser.referredBy,
+                                    message: `🎉 حصلت على 1 نقطة من إعلان شاهده ${currentUser.username}`,
+                                    fromAdmin: "system",
+                                    createdAt: new Date().toISOString(),
+                                    isRead: false
+                                };
+                                
+                                await database.ref('notifications/' + notificationId).set(notificationData);
+                            }
+                        }
+                        
                         await recordAdWatch(currentUsername);
                         updateUI();
                         updateAdLimitInfo();
@@ -527,7 +607,7 @@
                 });
         }
 
-        // ====== باقي أنظمة التطبيق (كما هي دون تغيير في المنطق) ======
+        // ====== باقي أنظمة التطبيق ======
         // CONTACT, NOTIFICATIONS, IP, MAINTENANCE, AUTH, PROFILE, WITHDRAWAL, UI, TOAST, إلخ
 
         // ====== CONTACT SYSTEM ======
@@ -535,6 +615,7 @@
         let canSendMessage = true;
         let nextMessageTime = 0;
         let extraMessageAllowed = false;
+        
         async function loadUserContactMessages() {
             try {
                 const snapshot = await database.ref('contactMessages').orderByChild('username').equalTo(currentUsername).once('value');
@@ -545,6 +626,7 @@
                 console.error('Error loading contact messages:', error);
             }
         }
+        
         function checkMessageCooldown() {
             const messagesArray = Object.values(userContactMessages);
             if (messagesArray.length === 0) {
@@ -566,6 +648,7 @@
             }
             updateContactUI();
         }
+        
         function updateContactUI() {
             const sendBtn = document.getElementById('sendMessageBtn');
             const timerDiv = document.getElementById('contactTimer');
@@ -599,6 +682,7 @@
             }
             updateContactHistory();
         }
+        
         function updateTimer() {
             const currentTime = new Date().getTime();
             const timeLeft = nextMessageTime - currentTime;
@@ -613,6 +697,7 @@
             document.getElementById('timerDisplay').textContent = 
                 `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
         }
+        
         function updateContactHistory() {
             const historyContainer = document.getElementById('contactHistory');
             const messagesArray = Object.values(userContactMessages)
@@ -646,6 +731,7 @@
                 </div>
             `).join('');
         }
+        
         async function sendMessageToAdmin() {
             const messageText = document.getElementById('contactMessage').value.trim();
             if (!messageText) {
@@ -677,9 +763,11 @@
                 showToast('❌ حدث خطأ في إرسال الرسالة', true);
             }
         }
+        
         function requestExtraMessage() {
             showToast('📨 تم طلب إرسال رسالة إضافية، سيتم مراجعته من قبل الإدارة');
         }
+        
         function showContactModal() {
             loadUserContactMessages();
             document.getElementById('contactAdminModal').classList.remove('hidden');
@@ -687,9 +775,11 @@
                 setInterval(updateTimer, 1000);
             }
         }
+        
         function closeContactModal() {
             document.getElementById('contactAdminModal').classList.add('hidden');
         }
+        
         function listenForContactUpdates() {
             database.ref('contactMessages').orderByChild('username').equalTo(currentUsername).on('value', (snapshot) => {
                 userContactMessages = snapshot.val() || {};
@@ -703,9 +793,11 @@
                 }
             });
         }
+        
         // ====== GLOBAL ANNOUNCEMENTS SYSTEM ======
         let globalAnnouncements = {};
         let shownAnnouncements = JSON.parse(localStorage.getItem('shownAnnouncements') || '{}');
+        
         async function loadGlobalAnnouncements() {
             try {
                 const snapshot = await database.ref('globalAnnouncements').once('value');
@@ -715,6 +807,7 @@
                 console.error('Error loading global announcements:', error);
             }
         }
+        
         function checkNewAnnouncements() {
             Object.entries(globalAnnouncements).forEach(([id, announcement]) => {
                 if (!shownAnnouncements[id] && announcement.active) {
@@ -724,21 +817,25 @@
                 }
             });
         }
+        
         function showAnnouncement(announcement) {
             document.getElementById('announcementContent').textContent = announcement.message;
             document.getElementById('announcementPopup').classList.remove('hidden');
             document.getElementById('announcementPopup').classList.add('flex');
         }
+        
         function closeAnnouncement() {
             document.getElementById('announcementPopup').classList.add('hidden');
             document.getElementById('announcementPopup').classList.remove('flex');
         }
+        
         function listenForAnnouncements() {
             database.ref('globalAnnouncements').on('value', (snapshot) => {
                 globalAnnouncements = snapshot.val() || {};
                 checkNewAnnouncements();
             });
         }
+        
         // ====== USER IP TRACKING ======
         async function getUserIP() {
             try {
@@ -750,6 +847,7 @@
                 return 'unknown';
             }
         }
+        
         async function saveUserIP(username, ip) {
             try {
                 const userRef = database.ref('users/' + username);
@@ -770,6 +868,7 @@
                 return false;
             }
         }
+        
         async function checkMultipleAccounts(username, ip) {
             try {
                 const usersSnapshot = await database.ref('users').once('value');
@@ -800,8 +899,10 @@
                 return 0;
             }
         }
+        
         // ====== NOTIFICATIONS SYSTEM ======
         let userNotifications = {};
+        
         async function loadUserNotifications() {
             try {
                 const snapshot = await database.ref('notifications').orderByChild('username').equalTo(currentUsername).once('value');
@@ -811,6 +912,7 @@
                 console.error('Error loading notifications:', error);
             }
         }
+        
         function updateNotificationsCount() {
             const unreadNotifications = Object.values(userNotifications).filter(notification => !notification.isRead);
             const notificationsCount = document.getElementById('notificationsCount');
@@ -821,13 +923,16 @@
                 notificationsCount.classList.add('hidden');
             }
         }
+        
         function showNotifications() {
             document.getElementById('notificationsScreen').classList.remove('hidden');
             displayNotifications();
         }
+        
         function closeNotifications() {
             document.getElementById('notificationsScreen').classList.add('hidden');
         }
+        
         function displayNotifications() {
             const notificationsList = document.getElementById('notificationsList');
             const notificationsArray = Object.values(userNotifications)
@@ -863,6 +968,7 @@
                 </div>
             `).join('');
         }
+        
         async function markNotificationAsRead(notificationId) {
             try {
                 await database.ref('notifications/' + notificationId).update({
@@ -874,6 +980,7 @@
                 console.error('Error marking notification as read:', error);
             }
         }
+        
         function listenForNotifications() {
             database.ref('notifications').orderByChild('username').equalTo(currentUsername).on('value', (snapshot) => {
                 userNotifications = snapshot.val() || {};
@@ -884,6 +991,7 @@
                 }
             });
         }
+        
         // ====== MAINTENANCE MODE CHECK ======
         async function checkMaintenanceMode() {
             try {
@@ -902,6 +1010,7 @@
                 return false;
             }
         }
+        
         function listenForMaintenance() {
             database.ref('maintenance').on('value', (snapshot) => {
                 const maintenance = snapshot.val();
@@ -914,9 +1023,11 @@
                 }
             });
         }
+        
         // ====== USER AUTHENTICATION WITH FIREBASE ======
         let currentUser = null;
         let currentUsername = null;
+        
         async function getUserFromFirebase(username) {
             try {
                 const snapshot = await database.ref('users/' + username).once('value');
@@ -926,6 +1037,7 @@
                 return null;
             }
         }
+        
         async function saveUserToFirebase(username, userData) {
             try {
                 await database.ref('users/' + username).set(userData);
@@ -935,6 +1047,7 @@
                 return false;
             }
         }
+        
         function switchAuthTab(tab) {
             const loginTab = document.getElementById('loginTab');
             const registerTab = document.getElementById('registerTab');
@@ -954,12 +1067,14 @@
                 registerForm.classList.remove('hidden');
             }
         }
+        
         function showAuthMessage(message, isError = false) {
             const authMessage = document.getElementById('authMessage');
             authMessage.textContent = message;
             authMessage.className = `mt-4 p-3 rounded-xl text-center font-bold ${isError ? 'bg-red-500/20 text-red-400 border border-red-400/30' : 'bg-green-500/20 text-green-400 border border-green-400/30'}`;
             authMessage.classList.remove('hidden');
         }
+        
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const isMaintenance = await checkMaintenanceMode();
@@ -988,31 +1103,79 @@
                 showAuthMessage('❌ اسم المستخدم أو كلمة المرور غير صحيحة', true);
             }
         });
+        
+        // ====== REGISTRATION WITH REFERRAL SYSTEM ======
         document.getElementById('registerForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const isMaintenance = await checkMaintenanceMode();
             if (isMaintenance) return;
+            
             const username = document.getElementById('registerUsername').value.trim();
             const password = document.getElementById('registerPassword').value;
             const passwordConfirm = document.getElementById('registerPasswordConfirm').value;
+            const referralCode = document.getElementById('referralCode').value.trim();
+            
             if (password !== passwordConfirm) {
                 showAuthMessage('❌ كلمات المرور غير متطابقة', true);
                 return;
             }
+            
             showAuthMessage('جاري إنشاء الحساب...', false);
             const existingUser = await getUserFromFirebase(username);
             if (existingUser) {
                 showAuthMessage('❌ اسم المستخدم موجود بالفعل', true);
                 return;
             }
+            
             const userIP = await getUserIP();
-            // ✅ تعديل رئيسي: نقاط الحساب الجديد = 0
+            
+            // إنشاء referralID للمستخدم الجديد
+            let referralID;
+            let isUnique = false;
+            
+            while (!isUnique) {
+                referralID = generateReferralID();
+                const existing = await checkReferralIDExists(referralID);
+                if (!existing) isUnique = true;
+            }
+            
+            // ✅ نقاط الحساب الجديد = 0 (بدون نقاط عند التسجيل)
+            let initialPoints = 0;
+            let referredBy = "none";
+            let referrerData = null;
+            
+            // معالجة كود الإحالة إذا تم إدخاله
+            if (referralCode) {
+                // البحث عن المستخدم الذي لديه هذا referralID
+                referrerData = await findUserByReferralID(referralCode);
+                
+                if (referrerData && !referrerData.referralBanned) {
+                    // إعطاء 50 نقطة للمستخدم الجديد
+                    initialPoints = 50;
+                    referredBy = referrerData.username;
+                    
+                    // إعطاء 50 نقطة للداعي
+                    await updateReferrerPoints(referrerData.username, 50);
+                    
+                    showAuthMessage('🎉 تم تفعيل كود الإحالة! حصلت على 50 نقطة مجانية', false);
+                } else if (referrerData && referrerData.referralBanned) {
+                    showAuthMessage('⚠️ كود الإحالة غير صالح (المحال محروم من الإحالة)', true);
+                    return;
+                } else {
+                    showAuthMessage('⚠️ كود الإحالة غير صالح، سيتم إنشاء الحساب بدون نقاط', false);
+                }
+            }
+            
             const newUser = {
                 username: username,
                 password: password,
-                points: 0,
+                points: initialPoints,
                 balance: 15000,
                 referrals: 0,
+                referralID: referralID,
+                referredBy: referredBy,
+                referralBanned: false,
+                referralEarnings: 0,
                 totalAdsWatched: 0,
                 joinDate: new Date().toISOString(),
                 isBanned: false,
@@ -1023,6 +1186,7 @@
                 lastIPUpdate: new Date().toISOString(),
                 adSessions: {}
             };
+            
             const success = await saveUserToFirebase(username, newUser);
             if (success) {
                 await checkMultipleAccounts(username, userIP);
@@ -1038,6 +1202,64 @@
                 showAuthMessage('❌ حدث خطأ، حاول مرة أخرى', true);
             }
         });
+        
+        // دالة للتحقق من وجود referralID
+        async function checkReferralIDExists(referralID) {
+            try {
+                const snapshot = await database.ref('users').orderByChild('referralID').equalTo(referralID).once('value');
+                return snapshot.exists();
+            } catch (error) {
+                console.error('Error checking referral ID:', error);
+                return false;
+            }
+        }
+        
+        // دالة للبحث عن مستخدم بواسطة referralID
+        async function findUserByReferralID(referralID) {
+            try {
+                const snapshot = await database.ref('users').orderByChild('referralID').equalTo(referralID).once('value');
+                if (snapshot.exists()) {
+                    const users = snapshot.val();
+                    for (const username in users) {
+                        return users[username];
+                    }
+                }
+                return null;
+            } catch (error) {
+                console.error('Error finding user by referral ID:', error);
+                return null;
+            }
+        }
+        
+        // دالة لتحديث نقاط المحال
+        async function updateReferrerPoints(username, points) {
+            try {
+                const userRef = database.ref('users/' + username);
+                await userRef.update({
+                    points: firebase.database.ServerValue.increment(points),
+                    referrals: firebase.database.ServerValue.increment(1)
+                });
+                
+                // إرسال إشعار للمحال
+                const notificationId = Date.now().toString();
+                const notificationData = {
+                    id: notificationId,
+                    username: username,
+                    message: `🎉 حصلت على ${points} نقطة من إحالة جديدة!`,
+                    fromAdmin: "system",
+                    createdAt: new Date().toISOString(),
+                    isRead: false
+                };
+                
+                await database.ref('notifications/' + notificationId).set(notificationData);
+                
+                return true;
+            } catch (error) {
+                console.error('Error updating referrer points:', error);
+                return false;
+            }
+        }
+        
         function logout() {
             if (confirm('هل تريد تسجيل الخروج؟')) {
                 localStorage.removeItem('shibaCurrentUser');
@@ -1048,7 +1270,7 @@
                 showToast('تم تسجيل الخروج');
             }
         }
-        // لا حاجة لـ saveCurrentUser لأننا نستخدم update مباشرةً
+        
         // ====== PROFILE SYSTEM ======
         async function loadProfileData() {
             if (!currentUsername) return;
@@ -1063,6 +1285,7 @@
                 console.error('Error loading profile data:', error);
             }
         }
+        
         function updateProfileUI() {
             if (!currentUser) return;
             document.getElementById('currentUsername').textContent = `مرحباً ${currentUser.username}`;
@@ -1075,8 +1298,10 @@
                 document.getElementById('profileBalance').textContent = currentUser.balance.toLocaleString();
                 document.getElementById('profileAds').textContent = (currentUser.totalAdsWatched || 0).toLocaleString();
                 document.getElementById('profileReferrals').textContent = (currentUser.referrals || 0).toLocaleString();
+                document.getElementById('profileReferralEarnings').textContent = (currentUser.referralEarnings || 0).toLocaleString();
             }
         }
+        
         function setupProfileListener() {
             if (!currentUsername) return;
             database.ref('users/' + currentUsername).on('value', (snapshot) => {
@@ -1087,6 +1312,7 @@
                 }
             });
         }
+        
         function loadProfileNotifications() {
             const profileNotifications = document.getElementById('profileNotifications');
             const notificationsArray = Object.values(userNotifications)
@@ -1110,6 +1336,7 @@
                 </div>
             `).join('');
         }
+        
         // ====== WITHDRAWAL REQUESTS SYSTEM ======
         async function submitWithdrawalRequest(amount, platform, walletId, shibaAmount) {
             try {
@@ -1135,6 +1362,7 @@
                 return false;
             }
         }
+        
         async function getUserWithdrawalRequests() {
             try {
                 const snapshot = await database.ref('withdrawalRequests').orderByChild('username').equalTo(currentUsername).once('value');
@@ -1144,12 +1372,14 @@
                 return {};
             }
         }
+        
         function listenForWithdrawalUpdates() {
             database.ref('withdrawalRequests').orderByChild('username').equalTo(currentUsername).on('value', (snapshot) => {
                 const requests = snapshot.val() || {};
                 updateWithdrawalRequestsUI(requests);
             });
         }
+        
         function updateWithdrawalRequestsUI(requests) {
             const requestsList = document.getElementById('withdrawalRequestsList');
             if (!requestsList) return;
@@ -1192,6 +1422,7 @@
                 </div>
             `).join('');
         }
+        
         // ====== ORIGINAL APP CODE ======
         let state = { page: 'home' };
         const pages = {
@@ -1225,7 +1456,7 @@
                                     <p class="text-xs opacity-80">تسجيل دخول يومي</p>
                                 </div>
                                 <div class="bg-purple-500/20 border border-purple-400/30 p-4 rounded-xl text-center">
-                                    <p class="text-3xl font-bold mb-1">${currentUser ? currentUser.referrals : 0}</p>
+                                    <p class="text-3xl font-bold mb-1">${currentUser ? (currentUser.referrals || 0) : 0}</p>
                                     <p class="text-xs opacity-80">إحالات نشطة</p>
                                 </div>
                             </div>
@@ -1335,63 +1566,98 @@
                         </div>
                         <h2 class="text-3xl font-black mb-2">برنامج الإحالة</h2>
                         <p class="text-purple-200 mb-6">ادع أصدقاءك واربح معهم</p>
+                        
+                        <!-- كود الإحالة -->
                         <div class="bg-gradient-to-r from-orange-500 to-pink-500 p-6 rounded-2xl mb-6 shadow-xl">
-                            <p class="text-5xl font-black mb-2">20%</p>
-                            <p class="text-lg font-bold">من أرباح كل إحالة</p>
+                            <p class="text-sm text-white/80 mb-2">كود الإحالة الخاص بك</p>
+                            <div class="flex items-center justify-between bg-black/40 p-4 rounded-xl mb-3">
+                                <code class="text-2xl font-bold tracking-wider" id="userReferralCode">${currentUser ? (currentUser.referralID || 'جاري التحميل...') : 'جاري التحميل...'}</code>
+                                <button onclick="copyReferralCode()" class="bg-white/20 hover:bg-white/30 p-3 rounded-lg transition-all copy-btn">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            <p class="text-sm text-white/80">أعط هذا الكود لأصدقائك عند التسجيل</p>
                         </div>
+                        
+                        <!-- تحذير تعدد الحسابات -->
+                        <div class="bg-yellow-500/20 border-2 border-yellow-400/30 p-4 rounded-2xl mb-6">
+                            <div class="flex items-center gap-2 mb-2">
+                                <svg class="w-6 h-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.998-.833-2.732 0L4.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                                </svg>
+                                <p class="font-bold text-yellow-400">⚠️ تنبيه مهم</p>
+                            </div>
+                            <p class="text-sm text-yellow-300">
+                                أي شخص يستخدم تعدد الحسابات (Multi-Accounts) سيتم حرمانه من مكافأة الإحالة نهائياً!
+                            </p>
+                        </div>
+                        
+                        <!-- رابط الإحالة -->
                         <div class="bg-black/30 p-4 rounded-2xl mb-4 border border-white/10">
                             <p class="text-xs text-purple-300 mb-2">رابط الإحالة الخاص بك</p>
                             <div class="flex items-center gap-2">
-                                <div class="flex-1 bg-white/10 px-4 py-3 rounded-xl text-sm font-mono truncate">
+                                <div class="flex-1 bg-white/10 px-4 py-3 rounded-xl text-sm font-mono truncate" id="referralLink">
                                     https://shiba.app/ref/${currentUser ? currentUser.username : 'USER'}
                                 </div>
-                                <button onclick="copyReferral()" class="bg-blue-500 p-3 rounded-xl hover:bg-blue-600 transition-colors">
+                                <button onclick="copyReferralLink()" class="bg-blue-500 p-3 rounded-xl hover:bg-blue-600 transition-colors copy-btn">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
                                     </svg>
                                 </button>
                             </div>
                         </div>
-                        <button class="w-full bg-gradient-to-r from-blue-500 to-purple-600 p-4 rounded-2xl font-bold shadow-lg shadow-blue-500/50 hover:scale-105 transform transition-all active:scale-95">
-                            شارك الرابط الآن
+                        
+                        <button onclick="shareReferral()" class="w-full bg-gradient-to-r from-blue-500 to-purple-600 p-4 rounded-2xl font-bold shadow-lg shadow-blue-500/50 hover:scale-105 transform transition-all active:scale-95">
+                            📲 شارك الرابط الآن
                         </button>
                     </div>
+                    
                     <div class="grid grid-cols-3 gap-3">
                         <div class="bg-white/10 backdrop-blur-xl p-4 rounded-xl border border-white/20 text-center">
-                            <p class="text-2xl font-bold text-green-400">${currentUser ? currentUser.referrals : 0}</p>
+                            <p class="text-2xl font-bold text-green-400" id="referralCount">${currentUser ? (currentUser.referrals || 0) : 0}</p>
                             <p class="text-xs text-purple-300 mt-1">إحالات</p>
                         </div>
                         <div class="bg-white/10 backdrop-blur-xl p-4 rounded-xl border border-white/20 text-center">
-                            <p class="text-2xl font-bold text-blue-400">2,400</p>
-                            <p class="text-xs text-purple-300 mt-1">أرباح</p>
+                            <p class="text-2xl font-bold text-blue-400" id="referralEarnings">${currentUser ? (currentUser.referralEarnings || 0) : 0}</p>
+                            <p class="text-xs text-purple-300 mt-1">أرباح الإحالة</p>
                         </div>
                         <div class="bg-white/10 backdrop-blur-xl p-4 rounded-xl border border-white/20 text-center">
-                            <p class="text-2xl font-bold text-purple-400">8</p>
-                            <p class="text-xs text-purple-300 mt-1">نشطة</p>
+                            <p class="text-2xl font-bold text-purple-400">20%</p>
+                            <p class="text-xs text-purple-300 mt-1">من أرباح كل إحالة</p>
                         </div>
                     </div>
+                    
                     <div class="bg-white/10 backdrop-blur-xl p-5 rounded-2xl border border-white/20">
-                        <h3 class="font-bold mb-4">كيف يعمل؟</h3>
+                        <h3 class="font-bold mb-4">🎯 كيف يعمل نظام الإحالة؟</h3>
                         <div class="space-y-3">
                             <div class="flex gap-3">
                                 <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 font-bold">1</div>
                                 <div>
-                                    <p class="font-semibold">شارك رابطك</p>
-                                    <p class="text-xs text-purple-300">أرسل الرابط لأصدقائك</p>
+                                    <p class="font-semibold">شارك رابطك أو كودك</p>
+                                    <p class="text-xs text-purple-300">أرسل الرابط أو كود الإحالة لأصدقائك</p>
                                 </div>
                             </div>
                             <div class="flex gap-3">
                                 <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center flex-shrink-0 font-bold">2</div>
                                 <div>
-                                    <p class="font-semibold">يسجلون الدخول</p>
-                                    <p class="text-xs text-purple-300">عندما يستخدمون رابطك</p>
+                                    <p class="font-semibold">يسجلون باستخدام كودك</p>
+                                    <p class="text-xs text-purple-300">عند تسجيلهم وهم يدخلون كود إحالتك</p>
                                 </div>
                             </div>
                             <div class="flex gap-3">
-                                <div class="w-8 h-8 bg-pink-500 rounded-full flex items-center justify-center flex-shrink-0 font-bold">3</div>
+                                <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 font-bold">3</div>
                                 <div>
-                                    <p class="font-semibold">تحصل على 20%</p>
-                                    <p class="text-xs text-purple-300">من كل أرباحهم مدى الحياة</p>
+                                    <p class="font-semibold">تحصل أنت وصديقك على 50 نقطة</p>
+                                    <p class="text-xs text-purple-300">تحصل أنت وصديقك على 50 نقطة مجانية</p>
+                                </div>
+                            </div>
+                            <div class="flex gap-3">
+                                <div class="w-8 h-8 bg-pink-500 rounded-full flex items-center justify-center flex-shrink-0 font-bold">4</div>
+                                <div>
+                                    <p class="font-semibold">تحصل على 20% من أرباحهم</p>
+                                    <p class="text-xs text-purple-300">تحصل على 20% من كل إعلان يشاهدونه</p>
                                 </div>
                             </div>
                         </div>
@@ -1426,6 +1692,14 @@
                             <p class="text-2xl font-bold text-purple-400" id="profileReferrals">${currentUser ? (currentUser.referrals || 0).toLocaleString() : 0}</p>
                             <p class="text-xs text-purple-300 mt-1">إحالات</p>
                         </div>
+                        <div class="bg-white/10 backdrop-blur-xl p-4 rounded-2xl border border-white/20 text-center">
+                            <p class="text-2xl font-bold text-orange-400" id="profileReferralEarnings">${currentUser ? (currentUser.referralEarnings || 0).toLocaleString() : 0}</p>
+                            <p class="text-xs text-purple-300 mt-1">أرباح إحالة</p>
+                        </div>
+                        <div class="bg-white/10 backdrop-blur-xl p-4 rounded-2xl border border-white/20 text-center">
+                            <p class="text-2xl font-bold text-pink-400" id="profileReferralID">${currentUser ? (currentUser.referralID || 'غير متوفر') : 'غير متوفر'}</p>
+                            <p class="text-xs text-purple-300 mt-1">كود الإحالة</p>
+                        </div>
                     </div>
                     <div class="bg-white/10 backdrop-blur-xl p-5 rounded-2xl border border-white/20">
                         <h3 class="font-bold text-lg mb-4">📊 معلومات الحساب</h3>
@@ -1441,6 +1715,16 @@
                             <div class="flex justify-between items-center">
                                 <span class="text-purple-300">آخر دخول:</span>
                                 <span class="font-bold">${currentUser ? new Date(currentUser.lastLogin).toLocaleDateString('ar-EG') : 'غير معروف'}</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-purple-300">تمت الإحالة بواسطة:</span>
+                                <span class="font-bold" id="profileReferredBy">${currentUser && currentUser.referredBy && currentUser.referredBy !== "none" ? currentUser.referredBy : 'لا أحد'}</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-purple-300">حالة الإحالة:</span>
+                                <span class="font-bold ${currentUser && currentUser.referralBanned ? 'text-red-400' : 'text-green-400'}" id="profileReferralStatus">
+                                    ${currentUser && currentUser.referralBanned ? '🚫 محروم' : '✅ نشط'}
+                                </span>
                             </div>
                             <div class="flex justify-between items-center">
                                 <span class="text-purple-300">الحالة:</span>
@@ -1484,6 +1768,46 @@
                 </div>
             `
         };
+        
+        // ====== دوال نظام الإحالة ======
+        
+        // نسخ كود الإحالة
+        function copyReferralCode() {
+            const referralCode = currentUser ? currentUser.referralID : '';
+            if (referralCode) {
+                navigator.clipboard.writeText(referralCode).then(() => {
+                    showToast('تم نسخ كود الإحالة! 📋');
+                });
+            }
+        }
+        
+        // نسخ رابط الإحالة
+        function copyReferralLink() {
+            const referralLink = `https://shiba.app/ref/${currentUsername}`;
+            navigator.clipboard.writeText(referralLink).then(() => {
+                showToast('تم نسخ رابط الإحالة! 📋');
+            });
+        }
+        
+        // مشاركة رابط الإحالة
+        function shareReferral() {
+            const referralLink = `https://shiba.app/ref/${currentUsername}`;
+            const referralCode = currentUser ? currentUser.referralID : '';
+            const message = `🎉 انضم إلى SHIBA CLAIM واربح معي!\nاستخدم كود الإحالة: ${referralCode}\nأو اضغط على الرابط: ${referralLink}\n\nاحصل على 50 نقطة مجانية عند التسجيل!`;
+            
+            if (navigator.share) {
+                navigator.share({
+                    title: 'انضم إلى SHIBA CLAIM',
+                    text: message,
+                    url: referralLink
+                });
+            } else {
+                navigator.clipboard.writeText(message).then(() => {
+                    showToast('تم نسخ رسالة الدعوة! شاركها مع أصدقائك 📲');
+                });
+            }
+        }
+        
         document.addEventListener('DOMContentLoaded', async function() {
             const isMaintenance = await checkMaintenanceMode();
             if (isMaintenance) {
@@ -1510,6 +1834,7 @@
             }
             listenForMaintenance();
         });
+        
         function startLoadingSequence() {
             document.getElementById('loadingScreen').classList.remove('hidden');
             let progress = 0;
@@ -1537,6 +1862,7 @@
                 }
             }, 200);
         }
+        
         function updateUI() {
             if (currentUser) {
                 document.getElementById('currentUsername').textContent = `مرحباً ${currentUser.username}`;
@@ -1544,6 +1870,7 @@
                 document.getElementById('balance').textContent = currentUser.balance.toLocaleString();
             }
         }
+        
         function showPage(page) {
             state.page = page;
             document.getElementById('content').innerHTML = pages[page];
@@ -1572,11 +1899,26 @@
             if (page === 'home') {
                 updateAdLimitInfo();
             }
+            if (page === 'referral') {
+                updateReferralStats();
+            }
         }
+        
+        // تحديث إحصائيات الإحالة
+        function updateReferralStats() {
+            if (!currentUser) return;
+            
+            document.getElementById('userReferralCode').textContent = currentUser.referralID || 'غير متوفر';
+            document.getElementById('referralLink').textContent = `https://shiba.app/ref/${currentUsername}`;
+            document.getElementById('referralCount').textContent = currentUser.referrals || 0;
+            document.getElementById('referralEarnings').textContent = currentUser.referralEarnings || 0;
+        }
+        
         async function loadWithdrawalRequests() {
             const requests = await getUserWithdrawalRequests();
             updateWithdrawalRequestsUI(requests);
         }
+        
         let selectedPlatform = null;
         function selectPlatform(platform) {
             selectedPlatform = platform;
@@ -1597,6 +1939,7 @@
             }
             validateWithdraw();
         }
+        
         function resetPlatformSelection() {
             selectedPlatform = null;
             const binanceBtn = document.getElementById('binanceBtn');
@@ -1611,6 +1954,7 @@
                 document.getElementById('walletId').value = '';
             }
         }
+        
         function validateWithdraw() {
             const amount = parseInt(document.getElementById('withdrawAmount').value);
             const walletId = document.getElementById('walletId').value;
@@ -1646,6 +1990,7 @@
                 }
             }
         }
+        
         async function handleClaim() {
             const amount = parseInt(document.getElementById('withdrawAmount').value);
             const walletId = document.getElementById('walletId').value;
@@ -1668,6 +2013,7 @@
                 }
             }
         }
+        
         function updateAdLimitInfo() {
             if (!currentUser) return;
             const adCount = getAdCountInLast12Hours(currentUser);
@@ -1689,9 +2035,7 @@
                 }
             }
         }
-        function copyReferral() {
-            showToast('تم نسخ الرابط! 📋');
-        }
+        
         function showToast(message, isError = false) {
             const toast = document.getElementById('toast');
             const toastMsg = document.getElementById('toastMsg');
@@ -1706,6 +2050,7 @@
                 toast.classList.add('hidden');
             }, 3000);
         }
+        
         async function refreshAdLimit() {
             if (!currentUsername) return;
             const btn = document.getElementById('refreshAdBtn');
